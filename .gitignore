@@ -1,0 +1,76 @@
+# From Gemini
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env/
+
+# Python specific files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter Notebook specific files
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+*.nbdata
+*.nbconvert.json
+
+# Data files (usually large or sensitive)
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.hdf5
+*.pkl
+*.pickle
+*.sqlite
+*.db
+data/
+output/
+results/
+temp/
+
+# Configuration files (often contain sensitive info or local settings)
+*.env
+.env
+config.local.py
+credentials.json
+secrets.json
+
+# Logs
+*.log
+logs/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker files (if not part of the deployable artifact)
+docker-compose.override.yml
+.dockerignore
+
+# Cloud provider specific files
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+
+# Testing artifacts
+.coverage
+htmlcov/
