@@ -6,6 +6,8 @@ name = "pypi"
 [packages]
 apache-airflow = "*"
 requests = "*"
+psycopg2-binary = "*"
+sqlalchemy = "*"
 
 [dev-packages]
 pytest = "*"
