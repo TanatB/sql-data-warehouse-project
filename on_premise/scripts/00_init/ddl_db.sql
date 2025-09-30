@@ -1,5 +1,0 @@
-/**/
-
-CREATE DATABASE IF NOT EXISTS DataWarehouse2025 OWNER postgres;
-
-CREATE SCHEMA IF NOT EXISTS raw_weather;

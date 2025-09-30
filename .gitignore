@@ -74,3 +74,46 @@ terraform.tfstate.backup
 # Testing artifacts
 .coverage
 htmlcov/
+
+
+# Airflow configuration (may contain secrets)
+config
+config/airflow.cfg
+config/airflow_local_settings.py
+config/*.cfg
+!config/airflow.cfg.example
+plugins
+plugins/*
+
+# Airflow logs (may contain sensitive data)
+logs
+*.log
+
+# Airflow metadata database (local SQLite)
+airflow.db
+airflow.db-shm
+airflow.db-wal
+
+# ============================================
+# Airflow Runtime Files
+# ============================================
+
+# Airflow internal files
+airflow-webserver.pid
+scheduler.pid
+standalone_admin_password.txt
+webserver_config.py
+
+# Airflow compiled files
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Airflow DAGs
+dags
+
+# Docker
+postgres_source_data/
+postgres_warehouse_data/
