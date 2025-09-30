@@ -164,27 +164,6 @@ services:
     restart: always
 
 
-  # Airflow Webserver for UI
-  airflow-webserver:
-    <<: *airflow-common
-    command: webserver
-    ports:
-      - "8080:8080"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: always
-    networks:
-      - etl_network
-    depends_on:
-      <<: *airflow-common-depends-on
-      airflow-init:
-        condition: service_completed_successfully
-
-
   airflow-apiserver:
     <<: *airflow-common
     command: api-server
