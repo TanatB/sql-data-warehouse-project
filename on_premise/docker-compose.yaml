@@ -55,8 +55,8 @@ x-airflow-common:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres-airflow/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_AIRFLOW_USER:-airflow}:${POSTGRES_AIRFLOW_PASSWORD:-airflow}@postgres-airflow/${POSTGRES_AIRFLOW_DB:-airflow}
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_AIRFLOW_USER:-airflow}:${POSTGRES_AIRFLOW_PASSWORD:-airflow}@postgres-airflow/${POSTGRES_AIRFLOW_DB:-airflow}
     AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
@@ -73,10 +73,10 @@ x-airflow-common:
     # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
   volumes:
-    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
-    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
-    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
-    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ${AIRFLOW_PROJ_DIR:-.}/airflow/dags:/opt/airflow/dags
+    - ${AIRFLOW_PROJ_DIR:-.}/airflow/logs:/opt/airflow/logs
+    - ${AIRFLOW_PROJ_DIR:-.}/airflow/config:/opt/airflow/config
+    - ${AIRFLOW_PROJ_DIR:-.}/airflow/plugins:/opt/airflow/plugins
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -87,19 +87,38 @@ x-airflow-common:
 
 
 services:
+  # PostgreSQL used to store Metadata for Airflow
+  postgres-airflow:
+    container_name: postgres_airflow
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_AIRFLOW_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_AIRFLOW_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_AIRFLOW_DB}
+    volumes:
+      - postgres_airflow_db_volume:/var/lib/postgresql/data
+    networks:
+      - etl_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AIRFLOW_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+
+  # PostgreSQL used to store our main Data Warehouse DB
   postgres-warehouse:
     container_name: postgres_warehouse
-    image:  postgres:13
+    image:  postgres:16-alpine
     ports:
       # <local>:<host>
-      - "${POSTGRES_WAREHOUSE_PORT}:5432"
+      - "${POSTGRES_WAREHOUSE_PORT:-5433}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_WAREHOUSE_DB}
       POSTGRES_USER: ${POSTGRES_WAREHOUSE_USER}
       POSTGRES_PASSWORD: ${POSTGRES_WAREHOUSE_PASSWORD}
     volumes:
-      - postgres_warehouse_data:/var/lib/postgresql/data
+      - postgres_warehouse_volume:/var/lib/postgresql/data
     networks:
       - etl_network
     healthcheck:
@@ -118,35 +137,17 @@ services:
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     ports:
-      - "5050:80"
+      - "${PGADMIN_PORT:-81}:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     networks:
       - etl_network
     depends_on:
+      - postgres-airflow
       - postgres-warehouse
 
 
-  # AirflowDB used to store Metadata for Airflow
-  postgres-airflow:
-    container_name: postgres_airflow
-    image: postgres:13
-    environment:
-      POSTGRES_USER: ${POSTGRES_AIRFLOW_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_AIRFLOW_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_AIRFLOW_DB}
-    volumes:
-      - postgres_airflow_data:/var/lib/postgresql/data
-    networks:
-      - etl_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AIRFLOW_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-    
-  # Redis for Celery
+  # Redis - Message Broker for Celery
   redis:
     # Redis is limited to 7.2-bookworm due to licencing change
     # https://redis.io/blog/redis-adopts-dual-source-available-licensing/
@@ -164,6 +165,7 @@ services:
     restart: always
 
 
+  # Webserver
   airflow-apiserver:
     <<: *airflow-common
     command: api-server
@@ -407,6 +409,6 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_warehouse_data:
-  postgres_airflow_data:
+  postgres_warehouse_volume:
+  postgres_airflow_db_volume:
   pgadmin_data:

@@ -111,9 +111,6 @@ webserver_config.py
 *.so
 .Python
 
-# Airflow DAGs
-dags
-
 # Docker
 postgres_source_data/
 postgres_warehouse_data/
