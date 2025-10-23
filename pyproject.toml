@@ -1,0 +1,27 @@
+[project]
+name = "sql-data-warehouse-project"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "charset-normalizer>=3.4.4",
+    "flatbuffers>=25.2.10",
+    "h11>=0.16.0",
+    "jh2>=5.0.10",
+    "niquests>=3.15.2",
+    "numpy>=2.3.4",
+    "openmeteo-requests>=1.7.3",
+    "openmeteo-sdk>=1.21.2",
+    "pandas>=2.3.3",
+    "psycopg2-binary>=2.9.11",
+    "python-dateutil>=2.9.0.post0",
+    "pytz>=2025.2",
+    "qh3>=1.5.5",
+    "requests-cache>=1.2.1",
+    "retry-requests>=2.0.0",
+    "six>=1.17.0",
+    "tzdata>=2025.2",
+    "urllib3-future>=2.14.905",
+    "wassima>=2.0.2",
+]
