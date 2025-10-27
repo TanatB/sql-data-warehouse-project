@@ -25,3 +25,8 @@ dependencies = [
     "urllib3-future>=2.14.905",
     "wassima>=2.0.2",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]
