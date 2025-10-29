@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import logging, json, os
 
 from typing import Dict, List,Optional
+import psycopg2
 
 # NOTE: Referenced parameters
 PARAMS = {
@@ -87,24 +88,39 @@ class OpenMeteoExtractor:
         """
         Main entry point
         """
-        try:
-            request_time = self._get_request_timestamp()
+        request_start = datetime.now(timezone.utc)
 
+        try:
             params = self._build_api_params()
 
             responses = self.client.weather_api(URL, params=params)
-            response = responses[0]
-            
-            f"successfully extracted on: {request_time} (Local time)"
+            response_time_ms = round((datetime.now(timezone.utc) - request_start).total_seconds() * 1000, 2)
 
-            return response
+            response = responses[0]
+            parsed_data = self._parse_response(response)
+            
+            print(f"successfully extracted, response time: {response_time_ms} ms.")
+            status = "success"
             
         except openmeteo_requests.OpenMeteoRequestsError as e:
-            return f"failed to connect: {e}"
+            response_time_ms = (datetime.now(timezone.utc) - request_start).total_seconds() * 1000
+            print(f"failed to connect: {e}")
+            status = "fail"
+            parsed_data = None
 
-    # TODO
-    def _handle_api_error(self, error):
-        pass
+        finally:
+            return {
+                "status": status,
+                "api_response": parsed_data,
+
+                # Metadata
+                "metadata": {
+                    "api_retrieval_time": request_start.isoformat(),
+                    "response_time_ms": response_time_ms,
+                    "latitude": self._latitude,
+                    "longitude": self._longitude
+                }
+            }
 
     # Simple Methods
     def _build_api_params(self) -> Dict[str, any]:
@@ -122,22 +138,14 @@ class OpenMeteoExtractor:
     def _get_request_timestamp(self):
         return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
 
-    # TODO
+    # Optional: maybe implement this for unit test.
     def _generate_output_path(self):
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        timestamp_str = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+        now = datetime.now()
+        date_str = now.strftime("%Y-%m-%d")
+        timestamp_str = now.strftime("%Y-%m-%dT%H-%M-%S")
         
         return 0
 
-    # TODO: Core Methods
-    def _add_metadata(self):
-        create_at = ""
-        extractor_version = ""
-        generationtime_ms=0
-
-        return 0
-
-    # FIXME: need metadata
     def _parse_response(self, response):
         parsed_response = self._build_api_params()
         parsed_response.pop("hourly")
@@ -151,8 +159,18 @@ class OpenMeteoExtractor:
 
         hourly_variables = self._hourly_variables
 
+        # time period (UTC time)
+        time_range = pd.date_range(
+            start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+            end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=hourly.Interval()),
+            inclusive="left"
+        )
+
+        parsed_response["hourly"]["time"] = time_range.tolist()
+
         for variable_no in range(hourly.VariablesLength()):
-            parsed_response["hourly"][hourly_variables[variable_no]] = hourly.Variables(variable_no).ValuesAsNumpy()
+            parsed_response["hourly"][hourly_variables[variable_no]] = hourly.Variables(variable_no).ValuesAsNumpy().tolist()
 
         return parsed_response
     
@@ -209,4 +227,5 @@ if __name__ == "__main__":
         print(f"Message: {e}")
     
     response = extractor.extract_forecast_data()
-    print(extractor._parse_response(response))
+
+    print(response)
