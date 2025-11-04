@@ -4,6 +4,7 @@ import requests_cache
 from retry_requests import retry
 
 from datetime import datetime, timezone
+import pytz
 import logging, json, os
 
 from typing import Dict, List,Optional
@@ -65,7 +66,7 @@ class OpenMeteoExtractor:
     """
     def __init__(self, latitude: float, longitude: float, 
                  location_name: str, output_dir: str, 
-                 timezone: str="auto",
+                 timezone: str="GMT",
                  hourly_variables: Optional[List[str]]=None,
                  forecast_days: int=7
     ):
