@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "sql-data-warehouse-project"
 version = "0.1.0"
@@ -16,6 +20,7 @@ dependencies = [
     "pandas>=2.3.3",
     "psycopg2-binary>=2.9.11",
     "python-dateutil>=2.9.0.post0",
+    "python-dotenv>=1.2.1",
     "pytz>=2025.2",
     "qh3>=1.5.5",
     "requests-cache>=1.2.1",
@@ -30,3 +35,7 @@ dependencies = [
 dev = [
     "pytest>=8.4.2",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["on_premise*", "cloud*"]

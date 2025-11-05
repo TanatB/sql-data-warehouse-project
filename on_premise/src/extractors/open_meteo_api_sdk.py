@@ -1,3 +1,5 @@
+# credit: https://github.com/open-meteo/sdk
+
 import openmeteo_requests
 import psycopg2
 from psycopg2.extras import execute_values
