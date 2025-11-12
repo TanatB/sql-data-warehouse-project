@@ -2,8 +2,6 @@
 -- CREATE DATABASE data_warehouse;
 -- CREATE DATABASE airflow_db;
 
-\c data_warehouse;
-
 -- SCHEMA
 CREATE SCHEMA IF NOT EXISTS bronze;
 CREATE SCHEMA IF NOT EXISTS silver;

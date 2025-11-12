@@ -21,5 +21,9 @@ CREATE TABLE IF NOT EXISTS bronze.weather_raw(
 );
 
 -- INDEX
-CREATE INDEX idx_forecast_location;
-CREATE INDEX idx_forecast_time;
+CREATE INDEX idx_weather_raw_location 
+    ON bronze.weather_raw (latitude, longitude);
+CREATE INDEX idx_weather_raw_api_response_gin 
+    ON bronze.weather_raw (raw_response);
+CREATE INDEX idx_weather_raw_location_time
+    ON bronze.weather_raw (latitude, longitude, created_at DESC)
