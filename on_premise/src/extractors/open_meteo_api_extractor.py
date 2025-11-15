@@ -62,14 +62,35 @@ JSON Return Object:
 
 class OpenMeteoExtractor:
     """
-    Designed for use in Apache Airflow DAGs.
-    """
+        Designed for use in Apache Airflow.
+        
+        Attributes:
+            latitude (float):
+            longitude (float):
+            location_name (str):
+            output_dir (str):
+            timezone (str):
+            hourly_variables (list[str], optional):
+            forecast_days (int):
+        """
     def __init__(self, latitude: float, longitude: float, 
                  location_name: str, output_dir: str, 
                  timezone: str="GMT",
                  hourly_variables: Optional[List[str]]=None,
                  forecast_days: int=7
     ):
+        """
+        Test.
+
+        Args:
+            latitude (float):
+            longitude (float):
+            location_name (str):
+            output_dir (str):
+            timezone (str):
+            hourly_variables (list[str], optional):
+            forecast_days (int):
+        """
         self.client = openmeteo_requests.Client()
         self._latitude = latitude
         self._longitude = longitude
@@ -80,14 +101,16 @@ class OpenMeteoExtractor:
         self._forecast_days = forecast_days
         # self._use_cache = use_cache
         self._logger = logging.getLogger(__name__)
-    
-    # TODO
-    def run(self):
-        pass
 
     def extract_forecast_data(self):
         """
         Main entry point
+
+        Returns:
+            dict:
+
+        Raises:
+            OpenMeteoRequestsError: e
         """
         request_start = datetime.now(timezone.utc)
 
@@ -98,7 +121,13 @@ class OpenMeteoExtractor:
             response_time_ms = round((datetime.now(timezone.utc) - request_start).total_seconds() * 1000, 2)
 
             response = responses[0]
+
             parsed_data = self._parse_response(response)
+
+            # Decode bytes fields
+            if 'timezone_abbreviation' in parsed_data:
+                if isinstance(parsed_data['timezone_abbreviation'], bytes):
+                    parsed_data['timezone_abbreviation'] = parsed_data['timezone_abbreviation'].decode('utf-8')
             
             print(f"successfully extracted, response time: {response_time_ms} ms.")
             status = "success"
@@ -127,6 +156,9 @@ class OpenMeteoExtractor:
     def _build_api_params(self) -> Dict[str, any]:
         """
         5 parameters that are used to parse it to the API.
+        
+        Returns:
+            Dict[str, any]:
         """
         return {"latitude": self._latitude,
                 "longitude": self._longitude,
@@ -137,10 +169,22 @@ class OpenMeteoExtractor:
 
     # TODO
     def _get_request_timestamp(self):
+        """
+        test.
+
+        Returns:
+            datetime: current date and time format.
+        """
         return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
 
     # Optional: maybe implement this for unit test.
     def _generate_output_path(self):
+        """
+        test.
+
+        Returns:
+            int: 0
+        """
         now = datetime.now()
         date_str = now.strftime("%Y-%m-%d")
         timestamp_str = now.strftime("%Y-%m-%dT%H-%M-%S")
@@ -148,6 +192,14 @@ class OpenMeteoExtractor:
         return 0
 
     def _parse_response(self, response):
+        """
+        test.
+        
+        Args:
+            response (dict):
+        Returns:
+            dict: parsed response
+        """
         parsed_response = self._build_api_params()
         parsed_response.pop("hourly")
         
@@ -191,10 +243,6 @@ class OpenMeteoExtractor:
     def validate_data(self):
         pass
 
-# TODO
-class DataQualityValidator:
-    pass
-
 
 if __name__ == "__main__":
     print('Running the manual extractor script.')
@@ -229,4 +277,4 @@ if __name__ == "__main__":
     
     response = extractor.extract_forecast_data()
 
-    print(response)
+    print(response['api_response']['timezone_abbreviation'])
