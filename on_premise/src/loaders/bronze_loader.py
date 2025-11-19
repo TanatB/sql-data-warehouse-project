@@ -77,9 +77,10 @@ class SQLExecutor:
         """
         pass
 
-    def insert_json(self, data):
+    def load_to_bronze(self, data):
         """
-        Recursively convert bytes to strings in nested dict/list structures.
+        Recursively convert bytes to strings in nested dict/list structures. 
+        Then load raw API data to bronze layer with operational metadata.
         
         Args:
             obj (object)
@@ -89,24 +90,20 @@ class SQLExecutor:
         cursor = self.conn.cursor()
         insert_query = """--sql
                 INSERT INTO bronze.weather_raw (
-                latitude, longitude, api_retrieval_time,
-                raw_response, response_time_ms, forecast_days, 
-                ingestion_timestamp, created_at) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                api_retrieval_time, response_time_ms,
+                created_at,
+                raw_api_response)
+                VALUES (%s, %s, %s, %s)
         """
 
         try:
             cleaned_data = self._clean_format_in_dict(data)
 
             cursor.execute(insert_query, (
-                    cleaned_data["api_response"]["latitude"],
-                    cleaned_data["api_response"]["longitude"],
                     cleaned_data["metadata"]["api_retrieval_time"],
-                    Json(cleaned_data),
                     cleaned_data["metadata"]["response_time_ms"],
-                    7,
                     datetime.now(),
-                    datetime.now()
+                    Json(cleaned_data["api_response"])
             ))
 
             self.conn.commit()
@@ -168,5 +165,5 @@ if __name__ == "__main__":
     )
     sql_executor = SQLExecutor(conn)
     # sql_executor.execute_file(SQL_DIR / "00_init" / "init_db.sql")
-    # sql_executor.execute_file(SQL_DIR / "01_bronze" / "bronze_layer.sql")
-    sql_executor.insert_json(raw_response)
+    sql_executor.execute_file(SQL_DIR / "01_bronze" / "bronze_layer.sql")
+    sql_executor.load_to_bronze(raw_response)
