@@ -4,11 +4,9 @@ import requests_cache
 from retry_requests import retry
 
 from datetime import datetime, timezone
-import pytz
-import logging, json, os
+import logging
 
-from typing import Dict, List,Optional
-import psycopg2
+from typing import Dict, List, Optional, Tuple, Any
 from psycopg2.extras import Json
 
 # NOTE: Referenced parameters
@@ -63,33 +61,32 @@ JSON Return Object:
 
 class OpenMeteoExtractor:
     """
-        Designed for use in Apache Airflow.
+        Extract weather forecast data from Open-Meteo API.
         
         Attributes:
             latitude (float): Latitude of the location
             longitude (float): Longitude of the location
-            location_name (str): location name convention for devs
-            output_dir (str):
+            location_name (str): location name for organization
             timezone (str): Timezone e.g. 'Asia/Bangkok'
-            hourly_variables (list[str], optional): List of hourly variables
-            forecast_days (int): Numbers of days forecasted
-            sql_executor (class): Executor Class from bronze_loader.py
+            hourly_variables (list[str], optional): List of hourly variables to request
+            forecast_days (int): Numbers of days to forecast
         """
-    def __init__(self, latitude: float, longitude: float, 
-                 location_name: str, output_dir: str, 
-                 timezone: str = "GMT",
-                 hourly_variables: Optional[List[str]] = None,
-                 forecast_days: int = 7,
-                 sql_executor = None
+    def __init__(
+            self, 
+            latitude: float, 
+            longitude: float, 
+            location_name: str, 
+            timezone: str = "GMT",
+            hourly_variables: Optional[List[str]] = None,
+            forecast_days: int = 7
     ):
         """
-        Test.
+        Initialize OpenMeteo API Extractor.
 
         Args:
             latitude (float):
             longitude (float):
             location_name (str):
-            output_dir (str):
             timezone (str):
             hourly_variables (list[str], optional):
             forecast_days (int):
@@ -98,16 +95,29 @@ class OpenMeteoExtractor:
         self._longitude = longitude
         self._location_name = location_name # File Organization
         self._timezone = timezone
-        self._output_dir = output_dir
-        self._hourly_variables = hourly_variables
+        self._hourly_variables = hourly_variables or self._get_default_hourly_variables()
         self._forecast_days = forecast_days
-        self._logger = logging.getLogger(__name__)
-        self._sql_executor = sql_executor
         
         # Client Setup
+        self._client = self._setup_client()
+
+    def _setup_client(self) -> openmeteo_requests.Client:
+        """
+        """
         cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
         retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
-        self.client = openmeteo_requests.Client(session=retry_session)
+        return openmeteo_requests.Client(session=retry_session)
+    
+    def _get_default_hourly_variables(self) -> List[str]:
+        """
+        Get default list of hourly variables (only temperature) if none provided.
+
+        Returns:
+            List[str]: Default weather variables
+        """
+        return [
+            "temperature_2m"
+        ]
 
     # TODO: add more exception catches & log them into the SQL table.
     def extract_forecast_data(self, retry_attempt: int = 0):
@@ -118,7 +128,9 @@ class OpenMeteoExtractor:
             retry_attempt (int): Current retry attempt number (passed by Airflow)
 
         Returns:
-            tuple: (api_response_dictionary, metadata_dictionary)
+            tuple[Dict, Dict]: (api_response, metadata)
+                - api_response: Parsed weather data
+                - metadata: Extraction metadata (timestamp, response time)
 
         Raises:
             OpenMeteoRequestsError: API request failed
@@ -133,10 +145,8 @@ class OpenMeteoExtractor:
 
             # Make API request
             responses = self.client.weather_api(URL, params=params)
-            response_time_ms = round(
-                (datetime.now(timezone.utc) - request_start).total_seconds() * 1000, 
-                2
-            )
+            response_time_ms = self._calculate_response_time(request_start)
+
 
             if not responses or len(responses) == 0:
                 raise ValueError("API returned empty response.")
@@ -189,6 +199,21 @@ class OpenMeteoExtractor:
             
             raise
 
+    def _calculate_response_time(self, request_start: datetime) -> float:
+        """
+        Calculate the response time in milliseconds
+        
+        Args:
+            request_start (datetime): datetime format (UTC)
+
+        Returns:
+            float: time in milliseconds
+        """
+        return round(
+            (datetime.now(timezone.utc) - request_start).total_seconds() * 1000, 
+            2
+        )
+
     # Simple Methods
     def _build_api_params(self) -> Dict[str, any]:
         """
@@ -202,7 +227,7 @@ class OpenMeteoExtractor:
                 "timezone": self._timezone,
                 "hourly": self._hourly_variables,
                 "forecast_days": self._forecast_days
-                }
+        }
 
     def _get_request_timestamp(self):
         """
@@ -263,8 +288,12 @@ class OpenMeteoExtractor:
             parsed_response["hourly"][hourly_variables[variable_no]] = hourly.Variables(variable_no).ValuesAsNumpy().tolist()
 
         return parsed_response
-    
-    # TODO: API error logging
+
+
+class DatabaseErrorLogger:
+    def __init__(self, sql_executor):
+        self._sql_executor = sql_executor
+
     def _log_api_error(
             self, 
             error_type: str, 
@@ -322,6 +351,8 @@ class OpenMeteoExtractor:
                 f"failed to log error to the database table: {log_error}\n"
                 f"Original error was: {error_type} - {error_message}"    
             )
+
+
 
 
 if __name__ == "__main__":
