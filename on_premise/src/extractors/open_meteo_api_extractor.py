@@ -284,14 +284,43 @@ class OpenMeteoExtractor:
         )
 
     # TODO: Error Handlers
-    def _validate_response(self):
-        pass
+    def _validate_response(self, responses: List) -> None:
+        """
+        Validate that API returned a non-empty response.
 
-    def _validate_parsed_data(self):
-        pass
+        Args:
+            response (List): API response list
+        
+        Raises:
+            ValueError: If response is empty or None
+        """
+        if not responses or len(responses) == 0:
+            raise ValueError("API returned empty response")
 
-    def _clean_response_data(self):
-        pass
+    def _validate_parsed_data(self, parsed_data: Dict[str, Any]) -> None:
+        """
+        Validate that parsed data contains require fields.
+
+        Args:
+            parse_data (Dict): Parsed API response
+
+        Raises:
+            ValueError: If required fields are missing
+        """
+        if "hourly" not in parsed_data:
+            raise ValueError("Missing 'hourly' data in API response")
+        
+        if not parsed_data(['hourly']):
+            raise ValueError("'hourly' data is empty in API response")
+
+    def _clean_response_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Clean response data (e.g. decode bytes fields).
+        """
+        if 'timezone_abbreviation' in data and isinstance(data['timezone_abbreviation'], bytes):
+            data['timezone_abbreviation'] = data['timezone_abbreviation'].decode('utf-8')
+            
+        return data
 
     # Properties
     @property
