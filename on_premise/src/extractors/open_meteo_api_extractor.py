@@ -119,7 +119,7 @@ class OpenMeteoExtractor:
             "temperature_2m"
         ]
 
-    # TODO: add more exception catches & log them into the SQL table.
+    # TODO: separate error handling from this function
     def extract_forecast_data(self, retry_attempt: int = 0):
         """
         Extract weather forecast data from Open-Meteo API.
@@ -165,10 +165,7 @@ class OpenMeteoExtractor:
 
             logging.info(f"✅ Successfully extracted data, response time: {response_time_ms} ms")
             
-            metadata = {
-                    "api_retrieval_time": request_start,
-                    "response_time_ms": response_time_ms
-                }
+            metadata = self._build_metadata(request_start, response_time_ms)
 
             return parsed_data, metadata
             
@@ -199,21 +196,6 @@ class OpenMeteoExtractor:
             
             raise
 
-    def _calculate_response_time(self, request_start: datetime) -> float:
-        """
-        Calculate the response time in milliseconds
-        
-        Args:
-            request_start (datetime): datetime format (UTC)
-
-        Returns:
-            float: time in milliseconds
-        """
-        return round(
-            (datetime.now(timezone.utc) - request_start).total_seconds() * 1000, 
-            2
-        )
-
     # Simple Methods
     def _build_api_params(self) -> Dict[str, any]:
         """
@@ -228,38 +210,24 @@ class OpenMeteoExtractor:
                 "hourly": self._hourly_variables,
                 "forecast_days": self._forecast_days
         }
-
-    def _get_request_timestamp(self):
+    
+    # TODO
+    def _build_metadata(self, request_start: datetime, response_time_ms: float) -> Dict[str, Any]:
         """
-        test.
-
-        Returns:
-            datetime: current date and time format.
         """
-        return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+        return {
+            "api_retrieval_time": request_start,
+            "response_time_ms": response_time_ms
+        }
 
-    # Optional: maybe implement this for unit test.
-    def _generate_output_path(self):
+    def _parse_response(self, response) -> Dict[str, Any]:
         """
-        test.
-
-        Returns:
-            int: 0
-        """
-        now = datetime.now()
-        date_str = now.strftime("%Y-%m-%d")
-        timestamp_str = now.strftime("%Y-%m-%dT%H-%M-%S")
-        
-        return 0
-
-    def _parse_response(self, response):
-        """
-        test.
+        Parse Open-Meteo API response into structured dictionary.
         
         Args:
-            response (dict):
+            response : Open-Meteo API response Object
         Returns:
-            dict: parsed response
+            Dict[str, Any]: parsed weather response
         """
         parsed_response = self._build_api_params()
         parsed_response.pop("hourly")
@@ -274,13 +242,7 @@ class OpenMeteoExtractor:
         hourly_variables = self._hourly_variables
 
         # time period (UTC time)
-        time_range = pd.date_range(
-            start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
-            end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
-            freq=pd.Timedelta(seconds=hourly.Interval()),
-            inclusive="left"
-        )
-
+        time_range = self._extract_time_range(hourly)
         parsed_response["hourly"]["time"] = time_range.tolist()
 
         # Manually add each response to dictionary.
@@ -289,71 +251,57 @@ class OpenMeteoExtractor:
 
         return parsed_response
 
-
-class DatabaseErrorLogger:
-    def __init__(self, sql_executor):
-        self._sql_executor = sql_executor
-
-    def _log_api_error(
-            self, 
-            error_type: str, 
-            error_message: str,
-            http_status_code: int = None,
-            request_params: dict = None,
-            retry_attempt: int = 0
-    ):
+    def _calculate_response_time(self, request_start: datetime) -> float:
         """
-        Log API errors to SQL bronze.api_error_log table
+        Calculate the API response time in milliseconds.
+        
+        Args:
+            request_start (datetime): datetime format (UTC)
+
+        Returns:
+            float: response time in milliseconds (2 decimal points)
+        """
+        return round(
+            (datetime.now(timezone.utc) - request_start).total_seconds() * 1000, 
+            2
+        )
+    
+    def _extract_time_range(self, hourly) -> pd.DatetimeIndex:
+        """
+        Extract time range from hourly data.
 
         Args:
-            error_type (str): Type of error.
-            error_message (str): Detailed error message.
-            http_status_code (int): HTTP status code if applicable.
-            request_params (dict): API request parameters that caused the error.
-            retry_attempt (int): Current retry attempt number (0-indexed).
+            hourly: Hourly data object generated from API response
+        
+        Returns:
+            pd.DatetimeIndex: Time range for hourly data
         """
+        return pd.date_range(
+            start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+            end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=hourly.Interval()),
+            inclusive="left"
+        )
 
-        if not self._sql_executor:
-            logging.warning(f"Cannot log error to database: no sql_executor configured")
-            return
+    # TODO: Error Handlers
+    def _validate_response(self):
+        pass
 
-        insert_query = """--sql
-            INSERT INTO bronze.api_error_log (
-                api_endpoint,
-                error_type,
-                error_message,
-                http_status_code,
-                request_params,
-                latitude,
-                longitude,
-                retry_attempt
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """
+    def _validate_parsed_data(self):
+        pass
 
-        try:
-            self._sql_executor.execute_query(
-                insert_query,
-                (
-                    self._base_url,
-                    error_type,
-                    str(error_message)[:1000],  # Truncated
-                    http_status_code,
-                    Json(request_params) if request_params else None,
-                    self._latitude,
-                    self._longitude,
-                    retry_attempt
-                )
-            )
-            logging.info(f"Error logged to database: {error_type}")
+    def _clean_response_data(self):
+        pass
 
-        except Exception as log_error:
-            logging.error(
-                f"failed to log error to the database table: {log_error}\n"
-                f"Original error was: {error_type} - {error_message}"    
-            )
-
-
-
+    # Properties
+    @property
+    def location_name(self) -> str:
+        return self._location_name
+    
+    @property
+    def coordinates(self) -> Tuple[float, float]:
+        return (self._latitude, self._longitude)
+    
 
 if __name__ == "__main__":
     # Testing the script
