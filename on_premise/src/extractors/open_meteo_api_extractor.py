@@ -142,7 +142,8 @@ class OpenMeteoExtractor:
         params = self._build_api_params()
 
         # Make API request
-        responses = self.client.weather_api(URL, params=params)
+        responses = self._client.weather_api(URL, params=params)
+
         response_time_ms = self._calculate_response_time(request_start)
 
         self._validate_response(responses)
@@ -274,7 +275,7 @@ class OpenMeteoExtractor:
         if "hourly" not in parsed_data:
             raise ValueError("Missing 'hourly' data in API response")
         
-        if not parsed_data(['hourly']):
+        if not parsed_data['hourly']:
             raise ValueError("'hourly' data is empty in API response")
 
     def _clean_response_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -309,8 +310,7 @@ if __name__ == "__main__":
             latitude = 13.754, 
             longitude = 100.5014, 
             location_name = "Bangkok", 
-            timezone = "Asia/Bangkok", 
-            output_dir = ".",
+            timezone = "Asia/Bangkok",
             hourly_variables = [
             "temperature_2m", 
             "apparent_temperature", 
