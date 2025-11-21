@@ -138,64 +138,28 @@ class OpenMeteoExtractor:
             Exception: Unexpected errors
         """
         request_start = datetime.now(timezone.utc)
-        params = None
 
-        try:
-            params = self._build_api_params()
+        params = self._build_api_params()
 
-            # Make API request
-            responses = self.client.weather_api(URL, params=params)
-            response_time_ms = self._calculate_response_time(request_start)
+        # Make API request
+        responses = self.client.weather_api(URL, params=params)
+        response_time_ms = self._calculate_response_time(request_start)
 
+        self._validate_response(responses)
 
-            if not responses or len(responses) == 0:
-                raise ValueError("API returned empty response.")
+        parsed_data = self._parse_response(responses[0])
 
-            response = responses[0]
+        self._validate_parsed_data(parsed_data)
 
-            parsed_data = self._parse_response(response)
+        cleaned_data = self._clean_response_data(parsed_data)
 
-            if 'hourly' not in parsed_data:
-                raise ValueError("Missing 'hourly' data in API response.")
-
-            # Decode bytes fields
-            if 'timezone_abbreviation' in parsed_data:
-                if isinstance(parsed_data['timezone_abbreviation'], bytes):
-                    parsed_data['timezone_abbreviation'] = parsed_data['timezone_abbreviation'].decode('utf-8')
-
-            logging.info(f"✅ Successfully extracted data, response time: {response_time_ms} ms")
+        logging.info(f"✅ Successfully extracted data for {self._location_name}"
+                     f"(response time: {response_time_ms} ms)")
             
-            metadata = self._build_metadata(request_start, response_time_ms)
+        metadata = self._build_metadata(request_start, response_time_ms)
 
-            return parsed_data, metadata
+        return cleaned_data, metadata
             
-        except openmeteo_requests.OpenMeteoRequestsError as e:
-            response_time_ms = round(
-                (datetime.now(timezone.utc) - request_start).total_seconds() * 1000, 
-                2
-            )
-
-            error_msg = f"OpenMeteo API request failed: {str(e)}"
-            logging.error(f" {error_msg} (response time: {response_time_ms} ms)")
-            
-            # Log to error table if sql_executor is available
-            if hasattr(self, '_sql_executor') and self._sql_executor:
-                pass
-
-            raise   # Re-raise for Airflow to handle
-
-        except ValueError as e:
-            error_msg = f"Invalid API response: {str(e)}"
-            logging.error(f" {error_msg}")
-            
-            raise
-
-        except Exception as e:
-            error_msg = f"Unexpected error during extraction: {str(e)}"
-            logging.error(f" {error_msg}")
-            
-            raise
-
     # Simple Methods
     def _build_api_params(self) -> Dict[str, any]:
         """
@@ -316,10 +280,15 @@ class OpenMeteoExtractor:
     def _clean_response_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Clean response data (e.g. decode bytes fields).
+
+        Args:
+            data (Dict[Str, Any]): 
+        
+        Return data (Dict[Str, Any]):
         """
         if 'timezone_abbreviation' in data and isinstance(data['timezone_abbreviation'], bytes):
             data['timezone_abbreviation'] = data['timezone_abbreviation'].decode('utf-8')
-            
+
         return data
 
     # Properties
