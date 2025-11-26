@@ -4,11 +4,10 @@ import requests_cache
 from retry_requests import retry
 
 from datetime import datetime, timezone
-import pytz
-import logging, json, os
+import logging
 
-from typing import Dict, List,Optional
-import psycopg2
+from typing import Dict, List, Optional, Tuple, Any
+from psycopg2.extras import Json
 
 # NOTE: Referenced parameters
 PARAMS = {
@@ -62,92 +61,139 @@ JSON Return Object:
 
 class OpenMeteoExtractor:
     """
-    Designed for use in Apache Airflow DAGs.
-    """
-    def __init__(self, latitude: float, longitude: float, 
-                 location_name: str, output_dir: str, 
-                 timezone: str="GMT",
-                 hourly_variables: Optional[List[str]]=None,
-                 forecast_days: int=7
+        Extract weather forecast data from Open-Meteo API.
+        
+        Attributes:
+            latitude (float): Latitude of the location
+            longitude (float): Longitude of the location
+            location_name (str): location name for organization
+            timezone (str): Timezone e.g. 'Asia/Bangkok'
+            hourly_variables (list[str], optional): List of hourly variables to request
+            forecast_days (int): Numbers of days to forecast
+        """
+    def __init__(
+            self, 
+            latitude: float, 
+            longitude: float, 
+            location_name: str, 
+            timezone: str = "GMT",
+            hourly_variables: Optional[List[str]] = None,
+            forecast_days: int = 7
     ):
-        self.client = openmeteo_requests.Client()
+        """
+        Initialize OpenMeteo API Extractor.
+
+        Args:
+            latitude (float):
+            longitude (float):
+            location_name (str):
+            timezone (str):
+            hourly_variables (list[str], optional):
+            forecast_days (int):
+        """
         self._latitude = latitude
         self._longitude = longitude
         self._location_name = location_name # File Organization
         self._timezone = timezone
-        self._output_dir = output_dir
-        self._hourly_variables = hourly_variables
+        self._hourly_variables = hourly_variables or self._get_default_hourly_variables()
         self._forecast_days = forecast_days
-        # self._use_cache = use_cache
-        self._logger = logging.getLogger(__name__)
-    
-    # TODO
-    def run(self):
-        pass
+        
+        # Client Setup
+        self._client = self._setup_client()
 
-    def extract_forecast_data(self):
+    def _setup_client(self) -> openmeteo_requests.Client:
         """
-        Main entry point
+        """
+        cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
+        retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
+        return openmeteo_requests.Client(session=retry_session)
+    
+    def _get_default_hourly_variables(self) -> List[str]:
+        """
+        Get default list of hourly variables (only temperature) if none provided.
+
+        Returns:
+            List[str]: Default weather variables
+        """
+        return [
+            "temperature_2m"
+        ]
+
+    # TODO: separate error handling from this function
+    def extract_forecast_data(self, retry_attempt: int = 0):
+        """
+        Extract weather forecast data from Open-Meteo API.
+
+        Args:
+            retry_attempt (int): Current retry attempt number (passed by Airflow)
+
+        Returns:
+            tuple[Dict, Dict]: (api_response, metadata)
+                - api_response: Parsed weather data
+                - metadata: Extraction metadata (timestamp, response time)
+
+        Raises:
+            OpenMeteoRequestsError: API request failed
+            ValueError: Invalid response data
+            Exception: Unexpected errors
         """
         request_start = datetime.now(timezone.utc)
 
-        try:
-            params = self._build_api_params()
+        params = self._build_api_params()
 
-            responses = self.client.weather_api(URL, params=params)
-            response_time_ms = round((datetime.now(timezone.utc) - request_start).total_seconds() * 1000, 2)
+        # Make API request
+        responses = self._client.weather_api(URL, params=params)
 
-            response = responses[0]
-            parsed_data = self._parse_response(response)
+        response_time_ms = self._calculate_response_time(request_start)
+
+        self._validate_response(responses)
+
+        parsed_data = self._parse_response(responses[0])
+
+        self._validate_parsed_data(parsed_data)
+
+        cleaned_data = self._clean_response_data(parsed_data)
+
+        logging.info(f"✅ Successfully extracted data for {self._location_name}"
+                     f"(response time: {response_time_ms} ms)")
             
-            print(f"successfully extracted, response time: {response_time_ms} ms.")
-            status = "success"
+        metadata = self._build_metadata(request_start, response_time_ms)
+
+        return cleaned_data, metadata
             
-        except openmeteo_requests.OpenMeteoRequestsError as e:
-            response_time_ms = (datetime.now(timezone.utc) - request_start).total_seconds() * 1000
-            print(f"failed to connect: {e}")
-            status = "fail"
-            parsed_data = None
-
-        finally:
-            return {
-                "status": status,
-                "api_response": parsed_data,
-
-                # Metadata
-                "metadata": {
-                    "api_retrieval_time": request_start.isoformat(),
-                    "response_time_ms": response_time_ms,
-                    "latitude": self._latitude,
-                    "longitude": self._longitude
-                }
-            }
-
     # Simple Methods
     def _build_api_params(self) -> Dict[str, any]:
         """
         5 parameters that are used to parse it to the API.
+        
+        Returns:
+            Dict[str, any]:
         """
         return {"latitude": self._latitude,
                 "longitude": self._longitude,
                 "timezone": self._timezone,
                 "hourly": self._hourly_variables,
                 "forecast_days": self._forecast_days
-                }
-
+        }
+    
     # TODO
-    def _get_request_timestamp(self):
-        return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    def _build_metadata(self, request_start: datetime, response_time_ms: float) -> Dict[str, Any]:
+        """
+        """
+        return {
+            "api_retrieval_time": request_start,
+            "response_time_ms": response_time_ms
+        }
 
-    # Optional: maybe implement this for unit test.
-    def _generate_output_path(self):
-        now = datetime.now()
-        date_str = now.strftime("%Y-%m-%d")
-        timestamp_str = now.strftime("%Y-%m-%dT%H-%M-%S")
+    def _parse_response(self, response) -> Dict[str, Any]:
+        """
+        Parse Open-Meteo API response into structured dictionary.
         
-        return 0
-
-    def _parse_response(self, response):
+        Args:
+            response : Open-Meteo API response Object
+        Returns:
+            Dict[str, Any]: parsed weather response
+        """
         parsed_response = self._build_api_params()
         parsed_response.pop("hourly")
         
@@ -161,51 +207,111 @@ class OpenMeteoExtractor:
         hourly_variables = self._hourly_variables
 
         # time period (UTC time)
-        time_range = pd.date_range(
+        time_range = self._extract_time_range(hourly)
+        parsed_response["hourly"]["time"] = time_range.tolist()
+
+        # Manually add each response to dictionary.
+        for variable_no in range(hourly.VariablesLength()):
+            parsed_response["hourly"][hourly_variables[variable_no]] = hourly.Variables(variable_no).ValuesAsNumpy().tolist()
+
+        return parsed_response
+
+    def _calculate_response_time(self, request_start: datetime) -> float:
+        """
+        Calculate the API response time in milliseconds.
+        
+        Args:
+            request_start (datetime): datetime format (UTC)
+
+        Returns:
+            float: response time in milliseconds (2 decimal points)
+        """
+        return round(
+            (datetime.now(timezone.utc) - request_start).total_seconds() * 1000, 
+            2
+        )
+    
+    def _extract_time_range(self, hourly) -> pd.DatetimeIndex:
+        """
+        Extract time range from hourly data.
+
+        Args:
+            hourly: Hourly data object generated from API response
+        
+        Returns:
+            pd.DatetimeIndex: Time range for hourly data
+        """
+        return pd.date_range(
             start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
             end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
             freq=pd.Timedelta(seconds=hourly.Interval()),
             inclusive="left"
         )
 
-        parsed_response["hourly"]["time"] = time_range.tolist()
+    # TODO: Error Handlers
+    def _validate_response(self, responses: List) -> None:
+        """
+        Validate that API returned a non-empty response.
 
-        for variable_no in range(hourly.VariablesLength()):
-            parsed_response["hourly"][hourly_variables[variable_no]] = hourly.Variables(variable_no).ValuesAsNumpy().tolist()
+        Args:
+            response (List): API response list
+        
+        Raises:
+            ValueError: If response is empty or None
+        """
+        if not responses or len(responses) == 0:
+            raise ValueError("API returned empty response")
 
-        return parsed_response
-    
-    # TODO: Storage
-    def save_to_bronze(self):
-        pass
-    
-    # TODO: Logging
-    def _setup_logging(self):
-        pass
-    
-    # TODO
-    def log_extraction_metrics(self):
-        pass
-    
-    # Optional
-    def validate_data(self):
-        pass
+    def _validate_parsed_data(self, parsed_data: Dict[str, Any]) -> None:
+        """
+        Validate that parsed data contains require fields.
 
-# TODO
-class DataQualityValidator:
-    pass
+        Args:
+            parse_data (Dict): Parsed API response
 
+        Raises:
+            ValueError: If required fields are missing
+        """
+        if "hourly" not in parsed_data:
+            raise ValueError("Missing 'hourly' data in API response")
+        
+        if not parsed_data['hourly']:
+            raise ValueError("'hourly' data is empty in API response")
+
+    def _clean_response_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Clean response data (e.g. decode bytes fields).
+
+        Args:
+            data (Dict[Str, Any]): 
+        
+        Return data (Dict[Str, Any]):
+        """
+        if 'timezone_abbreviation' in data and isinstance(data['timezone_abbreviation'], bytes):
+            data['timezone_abbreviation'] = data['timezone_abbreviation'].decode('utf-8')
+
+        return data
+
+    # Properties
+    @property
+    def location_name(self) -> str:
+        return self._location_name
+    
+    @property
+    def coordinates(self) -> Tuple[float, float]:
+        return (self._latitude, self._longitude)
+    
 
 if __name__ == "__main__":
+    # Testing the script
     print('Running the manual extractor script.')
     try:
         extractor = OpenMeteoExtractor(
-            latitude=13.754, 
-            longitude=100.5014, 
-            location_name="Bangkok", 
-            timezone="Asia/Bangkok", 
-            output_dir=".",
-            hourly_variables=[
+            latitude = 13.754, 
+            longitude = 100.5014, 
+            location_name = "Bangkok", 
+            timezone = "Asia/Bangkok",
+            hourly_variables = [
             "temperature_2m", 
             "apparent_temperature", 
             "relative_humidity_2m", 

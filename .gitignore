@@ -44,6 +44,7 @@ data/
 output/
 results/
 temp/
+servers.json
 
 # Configuration files (often contain sensitive info or local settings)
 *.env
