@@ -31,6 +31,9 @@ dependencies = [
     "wassima>=2.0.2",
 ]
 
+[project.scripts]
+# Optional: CLI entry points if needed
+
 [dependency-groups]
 dev = [
     "apache-airflow==3.1.0",
@@ -38,5 +41,4 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["on_premise*", "cloud*"]
+where = ["src"]
