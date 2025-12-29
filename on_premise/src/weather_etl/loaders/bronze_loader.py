@@ -1,4 +1,4 @@
-from on_premise.src.extractors.open_meteo_api_extractor import OpenMeteoExtractor
+from weather_etl.extractors.open_meteo_api_extractor import OpenMeteoExtractor
 import psycopg2
 from psycopg2.extras import Json
 import os
