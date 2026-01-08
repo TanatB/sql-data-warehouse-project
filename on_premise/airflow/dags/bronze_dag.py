@@ -2,10 +2,8 @@ from airflow.sdk import DAG
 from airflow.decorators import dag, task
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.providers.standard.operators.python import PythonOperator
+import psycopg2
 
-from weather_etl.extractors import DatabaseErrorLogger, ExtractionOrchestrator
-
-import logging
 import os
 from datetime import datetime, timedelta
 
@@ -108,32 +106,67 @@ def weather_etl_pipeline():
         }
 
     @task
-    def load_city_to_bronze(extraction_result: dict):
-        pass
+    def load_city_to_bronze(extracted_data: dict) -> dict:
+        from weather_etl.loaders.bronze_loader import SQLExecutor
 
-    
-    extractor = OpenMeteoExtractor(
-            latitude = 13.754, 
-            longitude = 100.5014, 
-            location_name = "Bangkok", 
-            timezone = "Asia/Bangkok",
-            hourly_variables = [
-            "temperature_2m", 
-            "apparent_temperature", 
-            "relative_humidity_2m", 
-            "precipitation",
-            "precipitation_probability", 
-            "weather_code", 
-            "wind_speed_10m", 
-            "wind_direction_10m", 
-            "surface_pressure", 
-            "cloud_cover", 
-            "rain", 
-            "showers", 
-            "snowfall", 
-            "uv_index", 
-            "is_day"
-            ]
+        conn = psycopg2.connect(
+            host = "postgres-warehouse",
+            port = 5432,
+            dbname = os.getenv("POSTGRES_WAREHOUSE_DB"),
+            user = os.getenv("POSTGRES_WAREHOUSE_USER"),
+            password = os.getenv("POSTGRES_WAREHOUSE_PASSWORD")
         )
 
-dag_instance = bronze_weather_dag()
+        try:
+            sql_executor = SQLExecutor(conn)
+
+            data_package = {
+                "api_response" : extracted_data["api_response"],
+                "metadata" : extracted_data["metadata"]
+            }
+
+            success = sql_executor.load_to_bronze(data_package)
+
+            return {
+                "success": success,
+                "location": extracted_data["location_name"]
+            }
+
+        finally:
+            conn.close()
+    
+    @task()
+    def log_pipeline_result(load_result: dict):
+        """_summary_
+
+        Args:
+            load_result (dict): _description_
+        """
+        import logging
+
+        if load_result["success"]:
+            logging.info(f"Pipeline completed for {load_result['location']}")
+        else:
+            logging.error(f"Pipeline failed for {load_result['location']}")
+
+    bangkok_config = {
+        "latitude": 13.754,
+        "longitude": 100.5014,
+        "location_name": "Bangkok",
+        "timezone": "Asia/Bangkok",
+        "hourly_variables": [
+            "temperature_2m",
+            "apparent_temperature",
+            "relative_humidity_2m",
+            "precipitation",
+            "precipitation_probability",
+            "weather_code",
+        ]
+    }
+
+    extracted = extract_city_weather_data(bangkok_config)
+    loaded = load_city_to_bronze(extracted)
+    log_pipeline_result(loaded)
+
+
+weather_etl_pipeline()
