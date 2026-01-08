@@ -206,13 +206,17 @@ class OpenMeteoExtractor:
 
         hourly_variables = self._hourly_variables
 
-        # time period (UTC time)
+        # time period (UTC time) - CONVERT TO ISO STRINGS
         time_range = self._extract_time_range(hourly)
-        parsed_response["hourly"]["time"] = time_range.tolist()
+        parsed_response["hourly"]["time"] = [
+            t.isoformat() for t in time_range  # Convert to ISO string
+        ]
 
         # Manually add each response to dictionary.
         for variable_no in range(hourly.VariablesLength()):
-            parsed_response["hourly"][hourly_variables[variable_no]] = hourly.Variables(variable_no).ValuesAsNumpy().tolist()
+            parsed_response["hourly"][hourly_variables[variable_no]] = (
+                hourly.Variables(variable_no).ValuesAsNumpy().tolist()
+            )
 
         return parsed_response
 
@@ -303,10 +307,11 @@ class OpenMeteoExtractor:
     
 
 if __name__ == "__main__":
+    import json
+    
     # Testing the script
     print('Running the manual extractor script.')
-    try:
-        extractor = OpenMeteoExtractor(
+    extractor = OpenMeteoExtractor(
             latitude = 13.754, 
             longitude = 100.5014, 
             location_name = "Bangkok", 
@@ -328,11 +333,13 @@ if __name__ == "__main__":
             "uv_index", 
             "is_day"
             ]
-        )
-        print("Class instance created.")
-    except Exception as e:
-        print(f"Message: {e}")
+    )
     
-    response = extractor.extract_forecast_data()
+    api_response, metadata = extractor.extract_forecast_data()
 
-    print(response)
+    # This should NOT raise an error after the fix
+    try:
+        json.dumps(api_response)
+        print("✅ JSON serialization successful!")
+    except TypeError as e:
+        print(f"❌ Still failing: {e}")
