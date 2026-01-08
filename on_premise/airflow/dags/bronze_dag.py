@@ -3,8 +3,6 @@ from airflow.decorators import dag, task
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.providers.standard.operators.python import PythonOperator
 
-# Import Python Classes from provided scripts
-from weather_etl.extractors.open_meteo_api_extractor import OpenMeteoExtractor
 from weather_etl.extractors import DatabaseErrorLogger, ExtractionOrchestrator
 
 import logging
@@ -70,32 +68,44 @@ default_args = {
     max_active_runs = 1, # run one at a time 
     tags = ['bronze', 'weather_forecast', 'etl'],
 )
-def bronze_weather_dag():
-    """_summary_
+def weather_etl_pipeline():
+    """Weather ETL Pipeline using TaskFlow API.
+
+    Extract -> Load Bronze -> Transform to Silver (in progress)
     """
-
-    @task()
-    def get_location_configs() -> list:
-        configs = []
-        for loc in LOCATIONS:
-            config = loc.copy()
-            config["hourly_variables"] = HOURLY_VARIABLES
-            configs.append(config)
-        return configs
-
 
     @task(retries=3, retry_delay=timedelta(minutes = 2))
     def extract_city_weather_data(location_config: dict, **context) -> dict:
-        """_summary_
+        """
+        Extract weather data from Open-Meteo API.
 
         Args:
-            location_config (dict): _description_
+            location_config (dict): latitude, longtitude, location_name, timezon
 
         Returns:
-            dict: _description_
+            dict: api_response & metadata
         """
-        pass
+        from weather_etl.extractors.open_meteo_api_extractor import OpenMeteoExtractor
+        
+        retry_attempt = context["task_instance"].try_number - 1
 
+        extractor = OpenMeteoExtractor(
+            latitude = location_config["latitude"],
+            longitude = location_config["longitude"],
+            location_name = location_config["location_name"],
+            timezone = location_config["timezone"],
+            hourly_variables = location_config.get("hourly_variables", ["temperature_2m"])
+        )
+
+        api_response, metadata = extractor.extract_forecast_data(
+            retry_attempt = retry_attempt
+        )
+
+        return {
+            "api_response" : api_response,
+            "metadata" : metadata,
+            "location_name" : location_config["location_name"]
+        }
 
     @task
     def load_city_to_bronze(extraction_result: dict):
