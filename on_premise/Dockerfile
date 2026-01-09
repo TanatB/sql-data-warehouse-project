@@ -34,6 +34,13 @@ RUN pip install --no-cache-dir -e .
 
 # Optionally install additional Python packages
 # RUN pip install --no-cache-dir some-other-package
+RUN pip install --no-cache-dir \
+    openmeteo-requests \
+    openmeteo-sdk \
+    requests-cache \
+    retry-requests \
+    pandas \
+    psycopg2-binary
 
 # Reset working directory
 WORKDIR /opt/airflow
