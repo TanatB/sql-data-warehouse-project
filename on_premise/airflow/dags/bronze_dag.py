@@ -1,5 +1,4 @@
-from airflow.sdk import DAG
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.providers.standard.operators.python import PythonOperator
 import psycopg2
