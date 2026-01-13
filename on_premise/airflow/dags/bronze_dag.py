@@ -3,9 +3,11 @@ from airflow.providers.standard.operators.bash import BashOperator
 from airflow.providers.standard.operators.python import PythonOperator
 import psycopg2
 
-import os
+import os, logging
 from datetime import datetime, timedelta
 
+
+logger = logging.getLogger(__name__)
 
 LOCATIONS = [
     {
@@ -84,6 +86,7 @@ def weather_etl_pipeline():
         """
         from weather_etl.extractors.open_meteo_api_extractor import OpenMeteoExtractor
         
+        logger.info("Starting weather extraction")
         retry_attempt = context["task_instance"].try_number - 1
 
         extractor = OpenMeteoExtractor(
@@ -97,6 +100,8 @@ def weather_etl_pipeline():
         api_response, metadata = extractor.extract_forecast_data(
             retry_attempt = retry_attempt
         )
+
+        logger.info(f"Extracted {location_config["location_ncame"]}")
 
         return {
             "api_response" : api_response,
