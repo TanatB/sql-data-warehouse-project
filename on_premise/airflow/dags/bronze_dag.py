@@ -101,7 +101,7 @@ def weather_etl_pipeline():
             retry_attempt = retry_attempt
         )
 
-        logger.info(f"Extracted {location_config["location_ncame"]}")
+        logger.info(f"Extracted {location_config["location_name"]}")
 
         return {
             "api_response" : api_response,
