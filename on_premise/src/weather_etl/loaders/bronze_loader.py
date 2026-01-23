@@ -57,6 +57,26 @@ class SQLExecutor:
             return False
         finally:
             cursor.close()
+    
+    def execute_query(self, query):
+        """_summary_
+
+        Args:
+            query (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute(query)
+            results = cursor.fetchall()
+            return results
+        except Exception as e:
+            print(f"Query failed: {e}")
+            raise
+        finally:
+            cursor.close()
 
     def execute_directory(self, sql_dir, pattern="*.sql"):
         """
