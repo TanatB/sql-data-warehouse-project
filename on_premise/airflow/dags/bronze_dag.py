@@ -64,7 +64,7 @@ default_args = {
 }
 
 # URI is just a convention (can be anything) but I use this for self-documenting
-bronze_dataset = Dataset("postgres://data_warehouse/bronze.weather_raw")
+bronze_dataset = Dataset("bronze_weather_raw")
 
 @dag(
     dag_id = 'weather_extraction_daily',
@@ -181,4 +181,4 @@ def weather_etl_pipeline():
     log_pipeline_result(loaded)
 
 
-weather_etl_pipeline()
+dag = weather_etl_pipeline()
