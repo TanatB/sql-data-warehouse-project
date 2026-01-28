@@ -98,7 +98,7 @@ SELECT
     humidity_val::FLOAT as relative_humidity_2m_percent,
     precip_val::FLOAT as precipitation_mm,
     weather_code_val as weather_code,
-    is_day_val::BOOLEAN as is_day,
+    is_day_val::FLOAT as is_day,
     wind_speed_val::FLOAT as wind_speed_10m_kmh,
     cloud_cover_val::FLOAT as cloud_cover_percent,
     uv_val::FLOAT as uv_index,
