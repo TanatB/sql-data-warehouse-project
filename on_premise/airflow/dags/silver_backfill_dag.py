@@ -81,7 +81,7 @@ def silver_backfill_pipeline():
                 logger.info(f"Backfilling records up to {end_date}")
 
             sql_script = sql_script.replace(
-                "WHERE w.created_at > NOW() - INTERVAL '1 hour",
+                "WHERE w.created_at > NOW() - INTERVAL '1 hour'",
                 where_clause
             )
 
@@ -112,8 +112,54 @@ def silver_backfill_pipeline():
             conn.close()
 
     @task
-    def verify_backfill():
-        pass
+    def verify_backfill(backfill_result: dict):
+        """_summary_
+
+        Args:
+            backfill_result (dict): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        conn = psycopg2.connect(
+            host = "postgres-warehouse",
+            port = 5432,
+            dbname = os.getenv("POSTGRES_WAREHOUSE_DB"),
+            user = os.getenv("POSTGRES_WAREHOUSE_USER"),
+            password = os.getenv("POSTGRES_WAREHOUSE_PASSWORD")
+        )
+        try:
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    MIN(observation_timestamp) as earliest_date,
+                    MAX(observation_timestamp) as latest_date,
+                    COUNT(DISTINCT DATE(observation_timestamp)) as unique_days
+                FROM silver.weather_observations
+            """)
+            
+            result = cursor.fetchone()
+            
+            logger.info(f" Silver Layer Statistics:")
+            logger.info(f"   Total records: {result[0]}")
+            logger.info(f"   Earliest observation: {result[1]}")
+            logger.info(f"   Latest observation: {result[2]}")
+            logger.info(f"   Unique days: {result[3]}")
+            
+            return {
+                "total_records": result[0],
+                "earliest": str(result[1]),
+                "latest": str(result[2]),
+                "unique_days": result[3]
+            }
+        
+        finally:
+            cursor.close()
+            conn.close()
+        
+        return {0:1}
 
 
     # FLOW
