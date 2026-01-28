@@ -11,7 +11,7 @@ import os, logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Redirect Airflow path to SQL directory
+# Redirect Airflow's Docker path to SQL directory
 PROJECT_ROOT = Path(__file__).parent.parent
 SQL_DIR = PROJECT_ROOT / "sql"
 

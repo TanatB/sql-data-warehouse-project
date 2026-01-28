@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS silver.weather_observations (
     relative_humidity_2m_percent FLOAT,
     precipitation_mm FLOAT,
     weather_code VARCHAR(50),
-    is_day BOOLEAN,
+    is_day FLOAT,
 
     -- Metrics for analysis
     wind_speed_10m_kmh FLOAT,
@@ -40,12 +40,12 @@ CREATE TABLE IF NOT EXISTS silver.weather_observations (
         UNIQUE (latitude, longitude, observation_timestamp)
 );
 
--- Common query patterns index
-CREATE INDEX idx_weather_obs_timestamp
-    ON silver.weather_observations(observation_timestamp);
+-- Common query patterns index (Uncomment if run for the first time)
+-- CREATE INDEX idx_weather_obs_timestamp
+--     ON silver.weather_observations(observation_timestamp);
 
-CREATE INDEX idx_weather_obs_location
-    ON silver.weather_observations(latitude, longitude);
+-- CREATE INDEX idx_weather_obs_location
+--     ON silver.weather_observations(latitude, longitude);
 
 
 /*
