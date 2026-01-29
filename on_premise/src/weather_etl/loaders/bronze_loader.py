@@ -20,12 +20,11 @@ password = os.getenv("POSTGRES_WAREHOUSE_PASSWORD")
 
 
 class SQLExecutor:
-    """Test
-    Args:
-        conn ():
+    """
+    SQL Executor class used to execute SQL script from SQL directory
     
     Attributes:
-        conn ():
+        conn (): psycopg2 connection
     """
 
     def __init__(self, conn):
@@ -33,12 +32,12 @@ class SQLExecutor:
 
     def execute_file(self, sql_file_path):
         """
-        Recursively convert bytes to strings in nested dict/list structures.
+        Overload the psycopg2 execute() method with our class method to run a whole script.
         
         Args:
-            sql_file_path (str):
+            sql_file_path (str): path of the SQL script
         Returns:
-            bool: 
+            bool: True if success, False otherwise with Exceptions
         """
         with open(sql_file_path, 'r') as f:
             sql_script = f.read()
@@ -59,13 +58,17 @@ class SQLExecutor:
             cursor.close()
     
     def execute_query(self, query):
-        """_summary_
+        """
+        Overload the psycopg2 execute() method with our class method to run a query.
 
         Args:
-            query (_type_): _description_
+            query (str): SQL query in Python string.
 
         Returns:
-            _type_: _description_
+            results (str): Query results
+        
+        Raises:
+            Exception: if the query failed.
         """
         cursor = self.conn.cursor()
         try:
@@ -97,29 +100,35 @@ class SQLExecutor:
         """
         pass
 
-    def load_to_bronze(self, data):
+    def load_to_bronze(self, data: dict):
         """
-        Recursively convert bytes to strings in nested dict/list structures. 
-        Then load raw API data to bronze layer with operational metadata.
+        Load raw response API data (in python dictionary format) to PostgreSQL database.
         
         Args:
-            obj (object)
+            data (dict): api_response, metadata
         Returns:
-            object: 
+            boolean: True or False 
         """
         cursor = self.conn.cursor()
-        insert_query = """--sql
+        insert_query = """
                 INSERT INTO bronze.weather_raw (
+                location_name,
+                latitude, longitude,
+                timezone,
                 api_retrieval_time, response_time_ms,
                 created_at,
                 raw_api_response)
-                VALUES (%s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """
 
         try:
             cleaned_data = self._clean_format_in_dict(data)
 
             cursor.execute(insert_query, (
+                    data["location_name"],
+                    data["latitude"],
+                    data["longitude"],
+                    data["timezone"],
                     cleaned_data["metadata"]["api_retrieval_time"],
                     cleaned_data["metadata"]["response_time_ms"],
                     datetime.now(),
@@ -162,6 +171,7 @@ class SQLExecutor:
             return obj
 
 
+# MANUAL TEST
 if __name__ == "__main__":
     extractor = OpenMeteoExtractor(latitude=13.754, 
                 longitude=100.5014, 
