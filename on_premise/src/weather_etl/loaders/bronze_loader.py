@@ -50,10 +50,10 @@ class SQLExecutor:
             print(f"Executed: {sql_file_path}")
             return True
         except Exception as e:
-            self.conn.rollback()
             print(f"Failed: {sql_file_path}")
             print(f" Error: {e}")
-            return False
+            self.conn.rollback()
+            raise
         finally:
             cursor.close()
     
