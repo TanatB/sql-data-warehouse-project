@@ -2,6 +2,8 @@ CREATE SCHEMA IF NOT EXISTS silver;
 
 CREATE TABLE IF NOT EXISTS silver.weather_observations (
     id SERIAL PRIMARY KEY,
+    -- Multi City features
+    location_name VARCHAR(100),
 
     -- Lineage
     bronze_record_id INTEGER,
@@ -37,15 +39,21 @@ CREATE TABLE IF NOT EXISTS silver.weather_observations (
     transformed_at TIMESTAMPTZ DEFAULT NOW(),
 
     CONSTRAINT unique_observation 
-        UNIQUE (latitude, longitude, observation_timestamp)
+        UNIQUE (location_name, observation_timestamp)
 );
 
--- Common query patterns index (Uncomment if run for the first time)
--- CREATE INDEX idx_weather_obs_timestamp
---     ON silver.weather_observations(observation_timestamp);
+--Common query patterns index (Uncomment if run for the first time)
+CREATE INDEX IF NOT EXISTS idx_weather_obs_timestamp
+    ON silver.weather_observations(observation_timestamp);
 
--- CREATE INDEX idx_weather_obs_location
---     ON silver.weather_observations(latitude, longitude);
+CREATE INDEX IF NOT EXISTS idx_weather_obs_location_time
+    ON silver.weather_observations(location_name, observation_timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_weather_obs_location
+    ON silver.weather_observations(latitude, longitude);
+
+CREATE INDEX IF NOT EXISTS idx_weather_obs_location_name
+    ON silver.weather_observations(location_name);
 
 
 /*
@@ -69,6 +77,7 @@ CREATE TABLE IF NOT EXISTS silver.weather_observations (
 -- TODO: TRANSFORMATION
 INSERT INTO silver.weather_observations (
     bronze_record_id,
+    location_name,
     latitude,
     longitude,
     timezone,
@@ -89,6 +98,7 @@ INSERT INTO silver.weather_observations (
 )
 SELECT
     w.record_id as bronze_record_id,
+    w.location_name,
     (w.raw_api_response->>'latitude')::FLOAT as latitude,
     (w.raw_api_response->>'longitude')::FLOAT as longitude,
     w.raw_api_response->>'timezone' as timezone,
@@ -98,7 +108,7 @@ SELECT
     humidity_val::FLOAT as relative_humidity_2m_percent,
     precip_val::FLOAT as precipitation_mm,
     weather_code_val as weather_code,
-    is_day_val::BOOLEAN as is_day,
+    is_day_val::FLOAT as is_day,
     wind_speed_val::FLOAT as wind_speed_10m_kmh,
     cloud_cover_val::FLOAT as cloud_cover_percent,
     uv_val::FLOAT as uv_index,
@@ -122,7 +132,15 @@ UNNEST(
     ARRAY(SELECT jsonb_array_elements_text(w.raw_api_response->'hourly'->'showers')),
     ARRAY(SELECT jsonb_array_elements_text(w.raw_api_response->'hourly'->'snowfall')),
     ARRAY(SELECT jsonb_array_elements_text(w.raw_api_response->'hourly'->'uv_index'))
-) AS h(time_val, temp_val, apparent_temp_val, humidity_val, precip_val, weather_code_val, is_day_val, wind_speed_val, cloud_cover_val, rain_val, showers_val, snowfall_val, uv_val)
-WHERE w.created_at > NOW() - INTERVAL '1 hour'
-ON CONFLICT (latitude, longitude, observation_timestamp) 
+) AS h(
+    time_val, temp_val, apparent_temp_val, humidity_val, 
+    precip_val, weather_code_val, is_day_val, wind_speed_val, 
+    cloud_cover_val, rain_val, showers_val, snowfall_val, uv_val
+    )
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM silver.weather_observations s
+    WHERE s.bronze_record_id = w.record_id
+)
+ON CONFLICT (location_name, observation_timestamp)
 DO NOTHING;
