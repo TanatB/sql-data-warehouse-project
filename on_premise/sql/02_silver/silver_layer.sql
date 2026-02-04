@@ -142,5 +142,6 @@ WHERE NOT EXISTS (
     FROM silver.weather_observations s
     WHERE s.bronze_record_id = w.record_id
 )
+-- DATE_FILTER_PLACEHOLDER
 ON CONFLICT (location_name, observation_timestamp)
 DO NOTHING;

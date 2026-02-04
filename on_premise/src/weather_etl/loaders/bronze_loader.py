@@ -169,7 +169,62 @@ class SQLExecutor:
             return obj.isoformat()
         else:
             return obj
+    
+    def execute_backfill(self, sql_file_path: str, start_date: str = None, end_date: str = None):
+        """
+        Execute backfill transformation with optional date filtering.
 
+        Args:
+            sql_file_path (str): _description_
+            start_date (str, optional): _description_. Defaults to None.
+            end_date (str, optional): _description_. Defaults to None.
+        
+        Returns:
+            int: Number of rows affected
+        """
+        with open(sql_file_path, 'r') as file:
+            sql_script = file.read()
+        
+        date_filter = self._build_date_filter(start_date=start_date, end_date=end_date)
+
+        if "-- DATE_FILTER_PLACEHOLDER" in sql_script:
+            sql_script = sql_script.replace("-- DATE_FILTER_PLACEHOLDER", date_filter)
+
+        cursor = self.conn.cursor()
+
+        try:
+            cursor.execute(sql_script)
+            rows_affected = cursor.rowcount
+            self.conn.commit()
+            print(f"Executed backfill: {rows_affected} rows affected.")
+            return rows_affected
+        except Exception as e:
+            print(f"Backfill failed: {e}")
+            raise
+        finally:
+            cursor.close()
+
+    def _build_date_filter(self, start_date: str = None, end_date: str = None) -> str:
+        """
+        Append SQL query with date filter conditions.
+
+        Args:
+            start_date (str, optional): Start date (YYYY-MM-DDTHH:MM:SS), default None
+            end_date (str, optional): End date (YYYY-MM-DDTHH:MM:SS), default None
+
+        Returns:
+            str: SQL AND conditions or empty string
+        """
+        conditions = []
+
+        if start_date:
+            conditions.append(f"w.created_at >= '{start_date}'::TIMESTAMPTZ")
+        if end_date:
+            conditions.append(f"w.created_at <= '{end_date}'::TIMESTAMPTZ")
+        if conditions:
+            return "AND " + "AND ".join(conditions)
+        
+        return ""
 
 # MANUAL TEST
 if __name__ == "__main__":
