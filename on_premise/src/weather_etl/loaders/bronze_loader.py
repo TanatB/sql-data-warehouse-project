@@ -20,12 +20,11 @@ password = os.getenv("POSTGRES_WAREHOUSE_PASSWORD")
 
 
 class SQLExecutor:
-    """Test
-    Args:
-        conn ():
+    """
+    SQL Executor class used to execute SQL script from SQL directory
     
     Attributes:
-        conn ():
+        conn (): psycopg2 connection
     """
 
     def __init__(self, conn):
@@ -33,12 +32,12 @@ class SQLExecutor:
 
     def execute_file(self, sql_file_path):
         """
-        Recursively convert bytes to strings in nested dict/list structures.
+        Overload the psycopg2 execute() method with our class method to run a whole script.
         
         Args:
-            sql_file_path (str):
+            sql_file_path (str): path of the SQL script
         Returns:
-            bool: 
+            bool: True if success, False otherwise with Exceptions
         """
         with open(sql_file_path, 'r') as f:
             sql_script = f.read()
@@ -51,21 +50,25 @@ class SQLExecutor:
             print(f"Executed: {sql_file_path}")
             return True
         except Exception as e:
-            self.conn.rollback()
             print(f"Failed: {sql_file_path}")
             print(f" Error: {e}")
-            return False
+            self.conn.rollback()
+            raise
         finally:
             cursor.close()
     
     def execute_query(self, query):
-        """_summary_
+        """
+        Overload the psycopg2 execute() method with our class method to run a query.
 
         Args:
-            query (_type_): _description_
+            query (str): SQL query in Python string.
 
         Returns:
-            _type_: _description_
+            results (str): Query results
+        
+        Raises:
+            Exception: if the query failed.
         """
         cursor = self.conn.cursor()
         try:
@@ -97,29 +100,35 @@ class SQLExecutor:
         """
         pass
 
-    def load_to_bronze(self, data):
+    def load_to_bronze(self, data: dict):
         """
-        Recursively convert bytes to strings in nested dict/list structures. 
-        Then load raw API data to bronze layer with operational metadata.
+        Load raw response API data (in python dictionary format) to PostgreSQL database.
         
         Args:
-            obj (object)
+            data (dict): api_response, metadata
         Returns:
-            object: 
+            boolean: True or False 
         """
         cursor = self.conn.cursor()
-        insert_query = """--sql
+        insert_query = """
                 INSERT INTO bronze.weather_raw (
+                location_name,
+                latitude, longitude,
+                timezone,
                 api_retrieval_time, response_time_ms,
                 created_at,
                 raw_api_response)
-                VALUES (%s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """
 
         try:
             cleaned_data = self._clean_format_in_dict(data)
 
             cursor.execute(insert_query, (
+                    data["location_name"],
+                    data["latitude"],
+                    data["longitude"],
+                    data["timezone"],
                     cleaned_data["metadata"]["api_retrieval_time"],
                     cleaned_data["metadata"]["response_time_ms"],
                     datetime.now(),
@@ -160,8 +169,64 @@ class SQLExecutor:
             return obj.isoformat()
         else:
             return obj
+    
+    def execute_backfill(self, sql_file_path: str, start_date: str = None, end_date: str = None):
+        """
+        Execute backfill transformation with optional date filtering.
 
+        Args:
+            sql_file_path (str): _description_
+            start_date (str, optional): _description_. Defaults to None.
+            end_date (str, optional): _description_. Defaults to None.
+        
+        Returns:
+            int: Number of rows affected
+        """
+        with open(sql_file_path, 'r') as file:
+            sql_script = file.read()
+        
+        date_filter = self._build_date_filter(start_date=start_date, end_date=end_date)
 
+        if "-- DATE_FILTER_PLACEHOLDER" in sql_script:
+            sql_script = sql_script.replace("-- DATE_FILTER_PLACEHOLDER", date_filter)
+
+        cursor = self.conn.cursor()
+
+        try:
+            cursor.execute(sql_script)
+            rows_affected = cursor.rowcount
+            self.conn.commit()
+            print(f"Executed backfill: {rows_affected} rows affected.")
+            return rows_affected
+        except Exception as e:
+            print(f"Backfill failed: {e}")
+            raise
+        finally:
+            cursor.close()
+
+    def _build_date_filter(self, start_date: str = None, end_date: str = None) -> str:
+        """
+        Append SQL query with date filter conditions.
+
+        Args:
+            start_date (str, optional): Start date (YYYY-MM-DDTHH:MM:SS), default None
+            end_date (str, optional): End date (YYYY-MM-DDTHH:MM:SS), default None
+
+        Returns:
+            str: SQL AND conditions or empty string
+        """
+        conditions = []
+
+        if start_date:
+            conditions.append(f"w.created_at >= '{start_date}'::TIMESTAMPTZ")
+        if end_date:
+            conditions.append(f"w.created_at <= '{end_date}'::TIMESTAMPTZ")
+        if conditions:
+            return "AND " + "AND ".join(conditions)
+        
+        return ""
+
+# MANUAL TEST
 if __name__ == "__main__":
     extractor = OpenMeteoExtractor(latitude=13.754, 
                 longitude=100.5014, 

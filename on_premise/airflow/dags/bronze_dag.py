@@ -30,7 +30,7 @@ LOCATIONS = [
         "location_name": "Paris",
         "latitude": 48.8534,
         "longitude": 2.3488,
-        "timezone": "auto"
+        "timezone": "Europe/Paris"
     },
 ]
 
@@ -55,8 +55,6 @@ default_args = {
     'owner': 'tanat_metmaolee',
     'depends_on_past': False,
     'email': ['bright.tanat@hotmail.com'],
-    'email_on_failure': False,
-    'email_on_retry': False,
     'retries': 3,
     'retry_delay': timedelta(minutes = 5),
     'retry_exponential_backoff': True,
@@ -81,8 +79,20 @@ def weather_etl_pipeline():
 
     Extract -> Load Bronze -> Transform to Silver (Later in the new script)
     """
+    @task
+    def get_locations():
+        """
+        Return list of locations to extract with default hourly_variables included.
 
-    @task(retries=3, retry_delay=timedelta(minutes = 2))
+        Returns:
+            dict: location_name, latitude, longitude, timezone, hour_variables
+        """
+        return [
+            {**location, "hourly_variables": HOURLY_VARIABLES}
+            for location in LOCATIONS
+        ]
+
+    @task(retries=3, retry_delay=timedelta(minutes = 1))
     def extract_city_weather_data(location_config: dict, **context) -> dict:
         """
         Extract weather data from Open-Meteo API.
@@ -92,36 +102,48 @@ def weather_etl_pipeline():
 
         Returns:
             dict: api_response & metadata
+
+        Raises:
+            Exception: if the location is failed to extract
         """
         from weather_etl.extractors.open_meteo_api_extractor import OpenMeteoExtractor
+
+        location_name = location_config["location_name"]
         
-        logger.info("Starting weather extraction")
+        logger.info(f"Starting weather extraction for city: {location_name}")
         retry_attempt = context["task_instance"].try_number - 1 # convert to zero-indexed
+        try:
+            extractor = OpenMeteoExtractor(
+                latitude = location_config["latitude"],
+                longitude = location_config["longitude"],
+                location_name = location_name,
+                timezone = location_config["timezone"],
+                hourly_variables = location_config.get("hourly_variables", HOURLY_VARIABLES)
+            )
 
-        extractor = OpenMeteoExtractor(
-            latitude = location_config["latitude"],
-            longitude = location_config["longitude"],
-            location_name = location_config["location_name"],
-            timezone = location_config["timezone"],
-            hourly_variables = location_config.get("hourly_variables", ["temperature_2m"])
-        )
+            api_response, metadata = extractor.extract_forecast_data(
+                retry_attempt = retry_attempt
+            )
 
-        api_response, metadata = extractor.extract_forecast_data(
-            retry_attempt = retry_attempt
-        )
+            logger.info(f"Succesfully extracted {location_name}")
 
-        logger.info(f"Extracted {location_config["location_name"]}")
-
-        return {
-            "api_response" : api_response,
-            "metadata" : metadata,
-            "location_name" : location_config["location_name"]
-        }
+            return {
+                "location_name" : location_name,
+                "latitude": location_config["latitude"],
+                "longitude": location_config["longitude"],
+                "timezone" : location_config["timezone"],
+                "api_response" : api_response,
+                "metadata" : metadata
+            }
+        
+        except Exception as e:
+            logger.error(f"Failed to extract {location_name}: {e}")
+            raise
 
     @task(outlets=[bronze_dataset])
     def load_city_to_bronze(extracted_data: dict) -> dict:
         """
-        Use SQLExecutor class to connect psycopg2 to execute scripts locally.
+        Use SQLExecutor class to connect psycopg2 to execute SQL scripts locally.
 
         Args:
             extracted_data (dict): api_response, metadata, location_name
@@ -142,42 +164,50 @@ def weather_etl_pipeline():
         try:
             sql_executor = SQLExecutor(conn)
 
-            data_package = {
-                "api_response" : extracted_data["api_response"],
-                "metadata" : extracted_data["metadata"]
-            }
-
-            success = sql_executor.load_to_bronze(data_package)
+            success = sql_executor.load_to_bronze(extracted_data)
 
             return {
-                "success": success,
-                "location": extracted_data["location_name"]
+                "location": extracted_data["location_name"],
+                "status": success
             }
 
         finally:
             conn.close()
     
-    @task()
-    def log_pipeline_result(load_result: dict):
+    @task(trigger_rule="all_done")
+    def log_pipeline_result(load_results: list):
         """
         Log the Pipeline result using logging module into PostgreSQL database for debugging.
 
         Args:
             load_result (dict): success (success status), location (location name)
         """
-        import logging
 
-        if load_result["success"]:
-            logging.info(f"Pipeline completed for {load_result['location']}")
-        else:
-            logging.error(f"Pipeline failed for {load_result['location']}")
+        successful = [result for result in load_results if result is not None]
+        failed_count = len(LOCATIONS) - len(successful)
 
-    # Specify one location (Bangkok) for now, may implement multi-city later
-    bangkok_config = LOCATIONS[0]
-    bangkok_config['hourly_variables'] = HOURLY_VARIABLES
+        logger.info(f"Extraction complete: {len(successful)} succeed, {failed_count} failed.")
 
-    extracted = extract_city_weather_data(bangkok_config)
-    loaded = load_city_to_bronze(extracted)
+        if failed_count > 0:
+            logger.warning("Some locations failed Extraction")
+
+            return {
+                "successful": len(successful),
+                "failed": failed_count,
+                "details": successful
+            }
+
+
+    # Single City
+    # bangkok_config = LOCATIONS[0]
+    # bangkok_config['hourly_variables'] = HOURLY_VARIABLES
+
+    locations = get_locations()
+
+    extracted = extract_city_weather_data.expand(location_config=locations)
+
+    loaded = load_city_to_bronze.expand(extracted_data=extracted)
+
     log_pipeline_result(loaded)
 
 

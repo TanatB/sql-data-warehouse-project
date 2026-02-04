@@ -84,12 +84,12 @@ class OpenMeteoExtractor:
         Initialize OpenMeteo API Extractor.
 
         Args:
-            latitude (float):
-            longitude (float):
-            location_name (str):
-            timezone (str):
-            hourly_variables (list[str], optional):
-            forecast_days (int):
+            latitude (float): latitude of the location
+            longitude (float): longitude of the location
+            location_name (str): location name used for multicity extract
+            timezone (str): timezone format e.g. 'Asia/Bangkok'
+            hourly_variables (list[str], optional): Metrics for gathering hourly weather information 
+            forecast_days (int): Number of days to forecast (Default 7)
         """
         self._latitude = latitude
         self._longitude = longitude
@@ -103,6 +103,10 @@ class OpenMeteoExtractor:
 
     def _setup_client(self) -> openmeteo_requests.Client:
         """
+        Setup a client session with cache session and session retry (5 retries).
+
+        Returns:
+            openmeteo_requests.Client: OpenMeteo Request API client
         """
         cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
         retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
@@ -119,7 +123,6 @@ class OpenMeteoExtractor:
             "temperature_2m"
         ]
 
-    # TODO: separate error handling from this function
     def extract_forecast_data(self, retry_attempt: int = 0):
         """
         Extract weather forecast data from Open-Meteo API.
@@ -164,10 +167,10 @@ class OpenMeteoExtractor:
     # Simple Methods
     def _build_api_params(self) -> Dict[str, any]:
         """
-        5 parameters that are used to parse it to the API.
+        Add 5 core metrics that are used to parse it to the API.
         
         Returns:
-            Dict[str, any]:
+            Dict[str, any]: latitude, longitude, timezone, hourly, forecast_days
         """
         return {"latitude": self._latitude,
                 "longitude": self._longitude,
@@ -176,9 +179,16 @@ class OpenMeteoExtractor:
                 "forecast_days": self._forecast_days
         }
     
-    # TODO
     def _build_metadata(self, request_start: datetime, response_time_ms: float) -> Dict[str, Any]:
         """
+        Build Metadata dictionary for development purpose
+
+        Args:
+            request_start (datetime): date & time the moment we requested the API 
+            response_time_ms (float): process response time in milliseconds
+
+        Returns:
+            Dict[str, Any]: api_retrieval_time (datetime), response_time_ms (int)
         """
         return {
             "api_retrieval_time": request_start,
@@ -252,7 +262,6 @@ class OpenMeteoExtractor:
             inclusive="left"
         )
 
-    # TODO: Error Handlers
     def _validate_response(self, responses: List) -> None:
         """
         Validate that API returned a non-empty response.
@@ -287,9 +296,9 @@ class OpenMeteoExtractor:
         Clean response data (e.g. decode bytes fields).
 
         Args:
-            data (Dict[Str, Any]): 
+            data (Dict[Str, Any]): Change timezone_abbreviation data format from Bytes to UTF-8
         
-        Return data (Dict[Str, Any]):
+        Return data (Dict[Str, Any]): reformated raw response Data (timezone_abbreviation)
         """
         if 'timezone_abbreviation' in data and isinstance(data['timezone_abbreviation'], bytes):
             data['timezone_abbreviation'] = data['timezone_abbreviation'].decode('utf-8')
@@ -306,6 +315,7 @@ class OpenMeteoExtractor:
         return (self._latitude, self._longitude)
     
 
+# MANUAL TESTING
 if __name__ == "__main__":
     import json
     

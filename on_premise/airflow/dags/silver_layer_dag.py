@@ -21,8 +21,6 @@ default_args = {
     'owner': 'tanat_metmaolee',
     'depends_on_past': False,
     'email': ['bright.tanat@hotmail.com'],
-    'email_on_failure': False,
-    'email_on_retry': False,
     'retries': 3,
     'retry_delay': timedelta(minutes = 5),
     'retry_exponential_backoff': True,
