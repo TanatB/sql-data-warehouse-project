@@ -37,10 +37,10 @@ CREATE TABLE IF NOT EXISTS bronze.api_error_log (
 
 
 -- INDEX
-CREATE INDEX idx_bronze_location
+CREATE INDEX IF NOT EXISTS idx_bronze_location
     ON bronze.weather_raw(location_name);
-CREATE INDEX idx_bronze_created_at
+CREATE INDEX IF NOT EXISTS idx_bronze_created_at
     ON bronze.weather_raw(created_at);
 
-CREATE INDEX idx_error_timestamp 
+CREATE INDEX IF NOT EXISTS idx_error_timestamp 
     ON bronze.api_error_log(error_timestamp DESC);
