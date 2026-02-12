@@ -1,7 +1,5 @@
 from airflow.sdk import dag, task
 from airflow.datasets import Dataset
-from airflow.providers.standard.operators.bash import BashOperator
-from airflow.providers.standard.operators.python import PythonOperator
 
 from weather_etl.loaders.bronze_loader import SQLExecutor
 
@@ -20,7 +18,6 @@ logger = logging.getLogger(__name__)
 default_args = {
     'owner': 'tanat_metmaolee',
     'depends_on_past': False,
-    'email': ['bright.tanat@hotmail.com'],
     'retries': 3,
     'retry_delay': timedelta(minutes = 5),
     'retry_exponential_backoff': True,
@@ -30,6 +27,7 @@ default_args = {
 # Dataset Dependencies for Airflow 3.0+
 # URI is just a convention (can be anything) but I use this for self-documenting
 bronze_dataset = Dataset("bronze_weather_raw")
+silver_dataset = Dataset("silver_weather_observations")
 
 @dag(
     dag_id = 'silver_layer_pipeline',
@@ -72,7 +70,7 @@ def silver_layer_pipeline():
             conn.close()
         
 
-    @task
+    @task(outlets=[silver_dataset])
     def validate_silver_data(query_result: dict):
         """
         Validate silver layer data quality.
