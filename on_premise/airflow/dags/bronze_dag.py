@@ -1,15 +1,18 @@
 from airflow.sdk import dag, task
 from airflow.datasets import Dataset
-from airflow.providers.standard.operators.bash import BashOperator
-from airflow.providers.standard.operators.python import PythonOperator
 
 import psycopg2
 
 import os, logging
 from datetime import datetime, timedelta
 
+from pathlib import Path
+
 
 logger = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).parent.parent
+SQL_DIR = PROJECT_ROOT / "sql"
 
 LOCATIONS = [
     {
@@ -54,7 +57,6 @@ HOURLY_VARIABLES = [
 default_args = {
     'owner': 'tanat_metmaolee',
     'depends_on_past': False,
-    'email': ['bright.tanat@hotmail.com'],
     'retries': 3,
     'retry_delay': timedelta(minutes = 5),
     'retry_exponential_backoff': True,
@@ -152,7 +154,7 @@ def weather_etl_pipeline():
             dict: success (success status), location (location name)
         """
         from weather_etl.loaders.bronze_loader import SQLExecutor
-
+        
         conn = psycopg2.connect(
             host = "postgres-warehouse",
             port = 5432,
@@ -163,13 +165,18 @@ def weather_etl_pipeline():
 
         try:
             sql_executor = SQLExecutor(conn)
-
+            sql_executor.execute_file(SQL_DIR / "01_bronze" / "bronze_layer.sql")
+            logging.info("Bronze schema/table Initialized.")
             success = sql_executor.load_to_bronze(extracted_data)
-
+            
             return {
                 "location": extracted_data["location_name"],
                 "status": success
             }
+            
+        except Exception as e:
+            logger.error(f"Bronze extraction failed: {e}")
+            raise
 
         finally:
             conn.close()
