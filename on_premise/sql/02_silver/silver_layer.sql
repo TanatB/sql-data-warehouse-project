@@ -144,4 +144,19 @@ WHERE NOT EXISTS (
 )
 -- DATE_FILTER_PLACEHOLDER
 ON CONFLICT (location_name, observation_timestamp)
-DO NOTHING;
+DO UPDATE SET
+    temperature_2m_celsius = EXCLUDED.temperature_2m_celsius,
+    apparent_temperature_celsius = EXCLUDED.apparent_temperature_celsius,
+    relative_humidity_2m_percent = EXCLUDED.relative_humidity_2m_percent,
+    precipitation_mm = EXCLUDED.precipitation_mm,
+    weather_code = EXCLUDED.weather_code,
+    is_day = EXCLUDED.is_day,
+    wind_speed_10m_kmh = EXCLUDED.wind_speed_10m_kmh,
+    cloud_cover_percent = EXCLUDED.cloud_cover_percent,
+    uv_index = EXCLUDED.uv_index,
+    rain_mm = EXCLUDED.rain_mm,
+    showers_mm = EXCLUDED.showers_mm,
+    snowfall_mm = EXCLUDED.snowfall_mm,
+    bronze_record_id = EXCLUDED.bronze_record_id,
+    api_retrieval_time = EXCLUDED.api_retrieval_time
+WHERE EXCLUDED.api_retrieval_time > silver.weather_observations.api_retrieval_time;

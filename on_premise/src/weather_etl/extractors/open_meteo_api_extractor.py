@@ -67,9 +67,9 @@ class OpenMeteoExtractor:
             latitude (float): Latitude of the location
             longitude (float): Longitude of the location
             location_name (str): location name for organization
-            timezone (str): Timezone e.g. 'Asia/Bangkok'
-            hourly_variables (list[str], optional): List of hourly variables to request
-            forecast_days (int): Numbers of days to forecast
+            timezone (str): Timezone e.g. 'Asia/Bangkok', default "GMT"
+            hourly_variables (list[str], optional): List of hourly variables to request, default None
+            forecast_days (int): Numbers of days to forecast, Default 7
         """
     def __init__(
             self, 
